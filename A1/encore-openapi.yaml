@@ -134,7 +134,7 @@ paths:
         answered with the stored outcome of the first attempt, applied 
         exactly once. Keys are retained for at least 24 hours. A 
         timed-out caller MUST retry with the same key; retrying with 
-        a fresh key creates a second reservation.
+        a fresh key creates a second waitlist entry.
       parameters:
         - name: eventId
           in: path
@@ -145,8 +145,8 @@ paths:
           required: true
           description: >
             A unique client-generated token identifying this attempt (a UUID
-            is fine). The scope of "same request" is this key plus the
-            request body.
+            is fine). The scope of "same request" is this key plus event plus 
+            the request body.
           schema:
             type: string
             minLength: 8
@@ -173,10 +173,10 @@ paths:
         "409":
           description: >
             The request is rejected. Error codes:
-            event_seats_not_full (join reservations not waitlist);
+            event_not_full (join reservations not waitlist);
             user_already_on_waitlist (userId already in event waitlist);
-            Retrying with the same eventId is pointless until seats are full; 
-            Retrying with the same userId returns this same outcome. Not retryable.
+            Retrying the same request (same key, event and body) replays 
+            this outcome. Not retryable.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -190,15 +190,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-
-  /events/{eventId}/waitlist:
     get:
       operationId: listWaitlistEntries
       summary: List waitlist entries
       description: >
         Returns waitlists for this event, highest position first 
-        (ie ordered by position). Safe: calling this changes nothing, 
-        and callers (including caches and crawlers) may rely on that.
+        (ie ordered by position) first come first served. Safe: 
+        calling this changes nothing, and callers (including caches 
+        and crawlers) may rely on that.
       parameters:
         - name: eventId
           in: path
@@ -255,8 +254,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-
-  /events/{eventId}/waitlist/{entryId}:
     delete:
       operationId: leaveWaitlist
       summary: Leave the waitlist for an event.
@@ -265,7 +262,7 @@ paths:
         NOT safe but naturally idempotent in effect, which is why the 
         Idempotency-Key header is not required: a repeated request carrying 
         the same id results in an error id not found, indicating to clients
-        that the id was successfully deleted.
+        that the entry no longer exists.
       parameters:
         - name: eventId
           in: path
@@ -278,9 +275,6 @@ paths:
       responses:
         "204":
           description: The entry was removed. No body.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
         "404":
           description: >
            No such resource matching the request. Error codes: 
@@ -372,11 +366,10 @@ components:
           type: integer
           minimum: 1
           description: >
-            Seats of event are full. 1 means the next available seat for this
-            event is waitlisted. This means the user on this waitlist are the
-            first to be granted any newly opened seat. This field is a 
-            point-in-time observation, not a promise; it may be stale by
-            the time a reservation is attempted.
+            Seats of event are full. a queue starting from 1, moves
+            up when an earlier entry leaves. A point-in-time observation
+            wher a POST response provides the position on creation while a 
+            GET returns the current position.
         createdAt:
           type: string
           format: date-time 
@@ -403,4 +396,9 @@ components:
             A stable, machine-readable error code, never prose. The catalog
             of codes, with the retryability of each, is part of this
             contract; codes may be added over time, so consumers must treat
-            an unrecognized code as non-retryable and surface it.
+            an unrecognized code as non-retryable and surface it. Catalog (code,
+            status, retryable): event_not_found (404, no); entry_not_found (404,
+            no); event_not_full (409, no); already_on_waitlist (409, no);
+            idempotency_key_required (422, no); idempotency_key_reuse (422, no);
+            invalid_request (422, no). Codes may be added over time, so consumers
+            must treat an unrecognized code as non-retryable and surface it.
