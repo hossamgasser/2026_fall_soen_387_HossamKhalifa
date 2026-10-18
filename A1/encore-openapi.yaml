@@ -196,8 +196,9 @@ paths:
       operationId: listWaitlistEntries
       summary: List waitlist entries
       description: >
-        Returns waitlists for this event, highest position first. Safe: calling this changes
-        nothing, and callers (including caches and crawlers) may rely on that.
+        Returns waitlists for this event, highest position first 
+        (ie ordered by position). Safe: calling this changes nothing, 
+        and callers (including caches and crawlers) may rely on that.
       parameters:
         - name: eventId
           in: path
@@ -250,10 +251,7 @@ paths:
             Failed to fetch waitlist entry, Error codes:
             event_not_found (check /events for the available events);
             entry_not_found (check /events/{eventId}/waitlist for 
-            entries and ids).
-            event_entry_match_not_found (entry code exists and event 
-            code is real but entry code is not for that event) 
-            Not retryable.
+            entries and ids). Not retryable.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
