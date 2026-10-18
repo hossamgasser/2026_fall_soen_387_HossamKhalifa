@@ -122,6 +122,175 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /events/{eventId}/waitlist:
+    post:
+      operationId: joinWaitlist
+      summary: Join the waitlist for a full event
+      description: >
+        Creates a waitlist seat for events with no seats available. 
+        NOT safe and not naturally idempotent, which is why the 
+        Idempotency-Key  header is required: a repeated request carrying 
+        the same key and the same body is recognized as a repeat and 
+        answered with the stored outcome of the first attempt, applied 
+        exactly once. Keys are retained for at least 24 hours. A 
+        timed-out caller MUST retry with the same key; retrying with 
+        a fresh key creates a second reservation.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/EventId" }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            A unique client-generated token identifying this attempt (a UUID
+            is fine). The scope of "same request" is this key plus the
+            request body.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        description: Stores info on which user joined the waitlist
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinWaitlistRequest" }
+              type: object
+              additionalProperties: false
+      responses:
+        "201":
+          description: The waitlist is joined; the waitlist is the receipt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waitlist" }
+        "404":
+          description: No event has this id. Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            The request is rejected. Error codes:
+            event_seats_not_full (join reservations not waitlist);
+            user_already_on_waitlist (userId already in event waitlist);
+            Retrying with the same eventId is pointless until seats are full; 
+            Retrying with the same userId returns this same outcome. Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: >
+            The request is unprocessable. Error codes:
+            userId_required (add the body);
+            idempotency_key_required (add the header);
+            idempotency_key_reuse (same key sent with a different body --
+            a client bug; do not retry, investigate). Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /events/{eventId}/waitlist:
+    get:
+      operationId: listWaitlistEntries
+      summary: List waitlist entries
+      description: >
+        Returns waitlists for this event, highest position first. Safe: calling this changes
+        nothing, and callers (including caches and crawlers) may rely on that.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/EventId" }        
+      responses:
+        "200":
+          description: The list of waitlist entries for this event.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [waitlists]
+                properties:
+                  waitlists:
+                    type: array
+                    items: { $ref: "#/components/schemas/Waitlist" }
+        "404":
+          description: No event has this id. Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+
+
+  /events/{eventId}/waitlist/{entryId}:
+    get:
+      operationId: getWaitlistEntry
+      summary: Fetch one waitlist entry
+      description: >
+        Returns specific waitlist entry by id in a certain event. Safe: calling this changes
+        nothing, and callers (including caches and crawlers) may rely on that.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/EventId" }
+        - name: entryId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/WaitlistId" }          
+      responses:
+        "200":
+          description: Fetch the waitlist entry matching that id if it is in the requested event
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waitlist" }
+        "404":
+          description: >
+            Failed to fetch waitlist entry, Error codes:
+            No event has this id (check /events for the available events);
+            No waitlist entry matches this id (check /events/{eventId}/waitlist for 
+            entries and ids). Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+#----------------------------------------- Here
+  /events/{eventId}/waitlist/{entryId}:
+    delete:
+      operationId: leaveWaitlist
+      summary: Leave the waitlist for an event.
+      description: >
+        Finds a previous waitlist created and deletes it. 
+        NOT safe but naturally idempotent in effect, which is why the 
+        Idempotency-Key header is not required: a repeated request carrying 
+        the same id results in an error id not found, indicating to clients
+        that the id was successfully deleted.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/EventId" }
+        - name: entryId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/WaitlistId" }
+      responses:
+        "204":
+          description: The entry was removed. No body.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: >
+           No such resource matching the request. Error codes: 
+           event_not_found (check /events for available event ids); 
+           entry_not_found (check /events/{eventId}/waitlist for 
+           available entries). Not retryable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /reservations/{reservationId}:
     get:
       operationId: getReservation
@@ -156,6 +325,13 @@ components:
       type: string
       pattern: "^res_[0-9]+$"
 
+    WaitlistId:
+      type: string
+      pattern: "^wl_(?:[0-9][a-z]){2,}$"
+      description: >
+       Opaque; clients must not parse or construct it. Ids are never reused
+       within the lifetime of the service, even after the entry is deleted.
+
     Event:
       type: object
       required: [id, title, seatsLeft]
@@ -185,6 +361,37 @@ components:
           type: string
           format: date-time
 
+    Waitlist:
+      type: object
+      required: [id, eventId, position, createdAt]
+      additionalProperties: false
+      properties:
+        id: { $ref: "#/components/schemas/WaitlistId" }
+        eventId: { $ref: "#/components/schemas/EventId" }
+        position: 
+          type: integer
+          minimum: 1
+          description: >
+            Seats of event are full. 1 means the next available seat for this
+            event is waitlisted. This means the user on this waitlist are the
+            first to be granted any newly opened seat. This field is a 
+            point-in-time observation, not a promise; it may be stale by
+            the time a reservation is attempted.
+        createdAt:
+          type: string
+          format: date-time 
+          description: >
+            Time this waitlist entry was created at.
+
+    JoinWaitlistRequest:
+      type: object
+      required: [userId]
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 128
     Error:
       type: object
       required: [error]
