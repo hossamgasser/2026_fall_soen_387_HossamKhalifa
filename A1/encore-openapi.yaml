@@ -181,7 +181,8 @@ paths:
         "422":
           description: >
             The request is unprocessable. Error codes:
-            userId_required (add the body);
+            invalid_request (body is missing, is not a JSON object, 
+            has fields other than userId, or userId is not a non-empty string);
             idempotency_key_required (add the header);
             idempotency_key_reuse (same key sent with a different body --
             a client bug; do not retry, investigate). Not retryable.
@@ -356,7 +357,6 @@ components:
     Waitlist:
       type: object
       required: [id, eventId, position, createdAt]
-      additionalProperties: false
       properties:
         id: { $ref: "#/components/schemas/WaitlistId" }
         eventId: { $ref: "#/components/schemas/EventId" }
