@@ -157,8 +157,6 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/JoinWaitlistRequest" }
-              type: object
-              additionalProperties: false
       responses:
         "201":
           description: The waitlist is joined; the waitlist is the receipt.
