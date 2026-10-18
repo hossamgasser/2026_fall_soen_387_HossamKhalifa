@@ -82,48 +82,70 @@ def t_unknown_id():
 
 
 # new tests added for Reservations
-
-idempotencyKeyReuse = str(uuid.uuid4())
-
 def t_create_reservation_success():
-    status, body = request(method = "POST", path = "/events/ev_103/reservations", headers = {"Idempotency-Key": idempotencyKeyReuse})
+    status, body = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": str(uuid.uuid4())})
     assert status == 201, f"expected 201, got {status}"
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "201")).validate(body)
 
 def t_create_reservation_unknownEvent():
     status, body = request(method = "POST", path = "/events/ev_1044/reservations", headers = {"Idempotency-Key": str(uuid.uuid4())})
     assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "not_found", f"expected not_found, got {body.get('error')}"
+
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "404")).validate(body)
 
 def t_create_reservation_seatsFull():
     status, body = request(method = "POST", path = "/events/ev_102/reservations", headers = {"Idempotency-Key": str(uuid.uuid4())})
     assert status == 409, f"expected 409, got {status}"
+    assert body["error"] == "sold_out", f"expected sold_out, got {body.get('error')}"
+
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "409")).validate(body)
 
 def t_create_reservation_missingIdempotency():
     status, body = request(method = "POST", path = "/events/ev_103/reservations")
     assert status == 422, f"expected 422, got {status}"
+    assert body["error"] == "idempotency_key_required", f"expected idempotency_key_required, got {body.get('error')}"
+
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "422")).validate(body)
 
 def t_create_reservation_idempotencyKeyReuse():
-    status, body = request(method = "POST", path = "/events/ev_103/reservations", headers = {"Idempotency-Key": idempotencyKeyReuse}, body = {"userID":"Hossam Khalifa"})
+
+    key = str(uuid.uuid4())
+    status, created = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": key})
+    assert status == 201, f"setup failed: expected 201, got {status}"
+
+    status, body = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": key}, body = {"userID":"Hossam Khalifa"})
     assert status == 422, f"expected 422, got {status}"
+    assert body["error"] == "idempotency_key_reuse", f"expected idempotency_key_reuse, got {body.get('error')}"
+
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "422")).validate(body)
 
 def t_create_reservation_idempotencyKeyReuse_sameBody():
-    status, body = request(method = "POST", path = "/events/ev_103/reservations", headers = {"Idempotency-Key": idempotencyKeyReuse})
+
+    key = str(uuid.uuid4())
+    status, created = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": key})
+    assert status == 201, f"setup failed: expected 201, got {status}"
+
+
+    status, body = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": key})
     assert status == 201, f"expected 201, got {status}"
     Draft202012Validator(schema_for("/events/{eventId}/reservations", "post", "201")).validate(body)
 
 
 def t_get_known_reservation():
-    status, body = get("/reservations/res_1")
+
+    status, created = request(method = "POST", path = "/events/ev_101/reservations", headers = {"Idempotency-Key": str(uuid.uuid4())})
+    assert status == 201, f"setup failed: expected 201, got {status}"
+
+    status, body = get(f"/reservations/{created['id']}")
     assert status == 200, f"expected 200, got {status}"
     Draft202012Validator(schema_for("/reservations/{reservationId}", "get", "200")).validate(body)
 
 def t_unknown_id_reservation():
     status, body = get("/reservations/res_4042")
     assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "not_found", f"expected not_found, got {body.get('error')}"
+
     Draft202012Validator(schema_for("/reservations/{reservationId}", "get", "404")).validate(body)
 
 
@@ -137,17 +159,22 @@ if __name__ == "__main__":
     check("unknown id yields 404 with the Error schema", t_unknown_id)
 
     # new checks
-    check("POST /events/{eventId}/reservations success matches the Event schema", t_create_reservation_success)
+    check("POST /events/{eventId}/reservations success matches the reservation schema", t_create_reservation_success)
 
     check("POST /events/{eventId}/reservations with unknown eventId yields 404 with the Error schema", t_create_reservation_unknownEvent)
     check("POST /events/{eventId}/reservations with event seats full yields 409 with the Error schema", t_create_reservation_seatsFull)
     check("POST /events/{eventId}/reservations with missing Idempotency key yields 422 with the Error schema", t_create_reservation_missingIdempotency)
     check("POST /events/{eventId}/reservations with reused Idempotency key in different body yields 422 with the Error schema", t_create_reservation_idempotencyKeyReuse)
-    check("POST /events/{eventId}/reservations with reused Idempotency key in same body gets same result matches the Event schema", t_create_reservation_idempotencyKeyReuse_sameBody)
+    check("POST /events/{eventId}/reservations with reused Idempotency key in same body gets same result matches the reservation schema", t_create_reservation_idempotencyKeyReuse_sameBody)
 
 
     check("GET /reservations/{reservationId} matches the Reservations schema", t_get_known_reservation)
     check("unknown reservation id yields 404 with the Error schema", t_unknown_id_reservation)
+
+
+    # Newest checks POST adding waitlist
+
+
 
     print(f"{CHECKS - FAILED}/{CHECKS} passed")
     sys.exit(1 if FAILED else 0)
