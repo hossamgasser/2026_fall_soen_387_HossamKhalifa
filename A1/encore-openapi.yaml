@@ -1,11 +1,13 @@
 openapi: 3.1.0
 info:
   title: Encore
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Campus event ticketing. v1.1 adds reservations. Additive relative to
     v1.0.0: every v1.0.0 request remains valid and every v1.0.0 response
-    shape is unchanged.
+    shape is unchanged. v1.2 adds waitlists (additive relative to v1.1.0):
+    every v1.1.0 request remains valid and every v1.1.0 response shape
+    is unchanged.
 servers:
   - url: http://localhost:3000
 
