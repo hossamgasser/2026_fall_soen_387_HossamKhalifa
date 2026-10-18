@@ -248,14 +248,13 @@ paths:
         "404":
           description: >
             Failed to fetch waitlist entry, Error codes:
-            No event has this id (check /events for the available events);
-            No waitlist entry matches this id (check /events/{eventId}/waitlist for 
+            event_not_found (check /events for the available events);
+            entry_not_found (check /events/{eventId}/waitlist for 
             entries and ids). Not retryable.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
-#----------------------------------------- Here
   /events/{eventId}/waitlist/{entryId}:
     delete:
       operationId: leaveWaitlist
