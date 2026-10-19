@@ -164,7 +164,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Waitlist" }
         "404":
-          description: No event has this id. Not retryable.
+          description: No event has this id. event_not_found. Not retryable.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -172,7 +172,7 @@ paths:
           description: >
             The request is rejected. Error codes:
             event_not_full (join reservations not waitlist);
-            user_already_on_waitlist (userId already in event waitlist);
+            already_on_waitlist (userId already in event waitlist);
             Retrying the same request (same key, event and body) replays 
             this outcome. Not retryable.
           content:

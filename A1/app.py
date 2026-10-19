@@ -121,7 +121,7 @@ def list_waitlists(eventId):
         # So, while stored ver position might be 2 and there is no pos 1, this shows as 1.
         position += 1
     
-    return jsonify({"entries": entries}), 200
+    return jsonify({"waitlists": entries}), 200
 
 @app.get("/events/<eventId>/waitlist/<entryId>")
 def get_waitlist(eventId, entryId):

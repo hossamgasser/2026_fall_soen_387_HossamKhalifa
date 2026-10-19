@@ -148,6 +148,253 @@ def t_unknown_id_reservation():
 
     Draft202012Validator(schema_for("/reservations/{reservationId}", "get", "404")).validate(body)
 
+# newest Tests to be written to confirm conformance.
+
+def t_join_waitlist():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+    assert "userId" not in body, "userId leaked into the join response"
+    
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "201")).validate(body)
+
+def t_join_waitlist_unknown_event():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_10000/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "event_not_found", f"expected event_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "404")).validate(body)
+
+def t_no_waitlist_available_seats():
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_101/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 409, f"expected 409, got {status}"
+    assert body["error"] == "event_not_full", f"expected event_not_full, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "409")).validate(body)
+
+def t_already_in_waitlist():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 409, f"expected 409, got {status}"
+    assert body["error"] == "already_on_waitlist", f"expected already_on_waitlist, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "409")).validate(body)
+
+
+def t_join_waitlist_broken_userId_body():
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":5})
+    assert status == 422, f"expected 422, got {status}"
+    assert body["error"] == "invalid_request", f"expected invalid_request, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "422")).validate(body)
+
+
+def t_join_waitlist_missing_Idempotency():
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", body = {"userId":user})
+    assert status == 422, f"expected 422, got {status}"
+    assert body["error"] == "idempotency_key_required", f"expected idempotency_key_required, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "422")).validate(body)
+
+def t_join_waitlist_Idempotency_reuse_diff_body():
+    user = "user-" + str(uuid.uuid4())
+
+    key = str(uuid.uuid4())
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+    user2 = "user-" + str(uuid.uuid4())
+
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId":user2})
+    assert status == 422, f"expected 422, got {status}"
+    assert body["error"] == "idempotency_key_reuse", f"expected idempotency_key_reuse, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "422")).validate(body)
+
+
+def t_join_waitlist_Idempotency_reuse_same_body_success():
+    user = "user-" + str(uuid.uuid4())
+
+    key = str(uuid.uuid4())
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "201")).validate(body)
+
+
+def t_join_waitlist_Idempotency_reuse_same_body_fail():
+    user = "user-" + str(uuid.uuid4())
+
+    status, body = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId": user})
+    assert status == 201, f"expected 201, got {status}"
+
+
+    key = str(uuid.uuid4())
+    status, first = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId": user})
+    assert status == 409, f"expected 409, got {status}"
+    assert first["error"] == "already_on_waitlist", f"expected already_on_waitlist, got {first.get('error')}"
+
+    status, again = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": key}, body = {"userId": user})
+    assert status == 409, f"expected 409, got {status}"
+    assert again["error"] == "already_on_waitlist", f"expected already_on_waitlist, got {again.get('error')}"
+    assert again == first, "replay differs from the first 409"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "post", "409")).validate(again)
+
+
+
+def t_get_event_waitlists():
+
+    status, body = get("/events/ev_102/waitlist")
+    assert status == 200, f"expected 200, got {status}"
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "get", "200")).validate(body)
+
+def t_get_unknown_event_waitlists():
+
+    status, body = get("/events/ev_100000/waitlist")
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "event_not_found", f"expected event_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist", "get", "404")).validate(body)
+
+def t_get_specific_waitlist():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, created = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+
+    status, body = get(f"/events/ev_102/waitlist/{created['id']}")
+    assert status == 200, f"expected 200, got {status}"
+    assert "userId" not in body, "userId leaked into the join response"
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "get", "200")).validate(body)
+
+def t_joined_other_event():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, created = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+
+    status, body = get(f"/events/ev_101/waitlist/{created['id']}")
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "entry_not_found", f"expected entry_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "get", "404")).validate(body)
+
+
+def t_get_specific_waitlist_unknown_event():
+
+    status, body = get(f"/events/ev_100002/waitlist/anyid")
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "event_not_found", f"expected event_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "get", "404")).validate(body)
+
+
+def t_get_specific_waitlist_unknown_entry():
+
+    status, body = get(f"/events/ev_102/waitlist/wl_0a0a0a0a0a") #random unknown entry id that matches format of the waitlist entry ids
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "entry_not_found", f"expected entry_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "get", "404")).validate(body)
+
+
+def t_delete_waitlist():
+
+    user = "user-" + str(uuid.uuid4())
+
+    status, created = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+
+    path = f"/events/ev_102/waitlist/{created['id']}"
+
+
+    status, body = request(method = "DELETE", path = path)
+    assert status == 204, f"expected 204, got {status}"
+    assert body is None, f"204 must have no body, got {body}"
+
+    status, body = get(path)
+    assert status == 404, f"expected 404 after delete, got {status}"
+    assert body["error"] == "entry_not_found", f"got {body.get('error')}"
+
+    status, body = request(method="DELETE", path=path)                                      # proves effectual idempotency without idempotency key
+    assert status == 404, f"expected 404 on repeat delete, got {status}"
+    assert body["error"] == "entry_not_found", f"got {body.get('error')}"
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "delete", "404")).validate(body)
+
+    
+def t_delete_waitlist_unknown_event():
+
+    status, body = request(method = "DELETE", path = "/events/ev_10000/waitlist/0a0a0a0a")
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "event_not_found", f"expected event_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "delete", "404")).validate(body)
+
+def t_delete_waitlist_unknown_entry():
+
+    status, body = request(method = "DELETE", path = "/events/ev_102/waitlist/0b0b0b0b0b")
+    assert status == 404, f"expected 404, got {status}"
+    assert body["error"] == "entry_not_found", f"expected entry_not_found, got {body.get('error')}"
+
+    Draft202012Validator(schema_for("/events/{eventId}/waitlist/{entryId}", "delete", "404")).validate(body)
+
+def t_position_change_after_waitlist_delete():
+    user = "user-" + str(uuid.uuid4())
+
+    status, first = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+    assert "userId" not in first, "userId leaked into the join response"
+
+    user = "user-" + str(uuid.uuid4())
+    status, second = request(method = "POST", path = "/events/ev_102/waitlist", headers = {"Idempotency-Key": str(uuid.uuid4())}, body = {"userId":user})
+    assert status == 201, f"expected 201, got {status}"
+    assert "userId" not in second, "userId leaked into the join response"
+
+    status, body = get("/events/ev_102/waitlist")
+    assert status == 200, f"expected 200, got {status}"
+
+    positions = {e["id"]: e["position"] for e in body["waitlists"]}
+
+    initial_pos_a = positions[first["id"]]
+    initial_pos_b = positions[second["id"]]
+
+    assert initial_pos_b == initial_pos_a + 1, "B should be directly behind A"
+
+    path = f"/events/ev_102/waitlist/{first['id']}"
+    status, body = request(method = "DELETE", path = path)
+    assert status == 204, f"expected 204, got {status}"
+
+    status, body = get("/events/ev_102/waitlist")
+    assert status == 200, f"expected 200, got {status}"
+
+    positions = {e["id"]: e["position"] for e in body["waitlists"]}
+
+    final_pos_b = positions[second["id"]]
+
+    assert final_pos_b == initial_pos_b - 1, "B should move 1 space up now that A is gone"
 
 
 
@@ -174,6 +421,38 @@ if __name__ == "__main__":
 
     # Newest checks POST adding waitlist
 
+    # new checks: POST /events/{eventId}/waitlist
+    check("POST /events/{eventId}/waitlist success matches the waitlist schema", t_join_waitlist)
+    check("POST /events/{eventId}/waitlist with unknown eventId yields 404 event_not_found with the Error schema", t_join_waitlist_unknown_event)
+    check("POST /events/{eventId}/waitlist with seats still available yields 409 event_not_full with the Error schema", t_no_waitlist_available_seats)
+    check("POST /events/{eventId}/waitlist with a user already on the waitlist yields 409 already_on_waitlist with the Error schema", t_already_in_waitlist)
+    check("POST /events/{eventId}/waitlist with a broken userId body yields 422 invalid_request with the Error schema", t_join_waitlist_broken_userId_body)
+    check("POST /events/{eventId}/waitlist with missing Idempotency key yields 422 idempotency_key_required with the Error schema", t_join_waitlist_missing_Idempotency)
+    check("POST /events/{eventId}/waitlist with reused Idempotency key in different body yields 422 idempotency_key_reuse with the Error schema", t_join_waitlist_Idempotency_reuse_diff_body)
+    check("POST /events/{eventId}/waitlist with reused Idempotency key in same body replays the same entry", t_join_waitlist_Idempotency_reuse_same_body_success)
+    check("POST /events/{eventId}/waitlist with reused Idempotency key replays the same 409 already_on_waitlist", t_join_waitlist_Idempotency_reuse_same_body_fail)
+
+    # new checks: GET /events/{eventId}/waitlist
+
+    check("GET /events/{eventId}/waitlist matches the waitlist list schema", t_get_event_waitlists)
+    check("GET /events/{eventId}/waitlist with unknown eventId yields 404 event_not_found with the Error schema", t_get_unknown_event_waitlists)
+
+    # new checks: GET /events/{eventId}/waitlist/{entryId}
+
+    check("GET /events/{eventId}/waitlist/{entryId} matches the waitlist schema", t_get_specific_waitlist)
+    check("GET /events/{eventId}/waitlist/{entryId} joined different event and looked up entry on wrong event yields 404 entry_not_found with the Error schema", t_joined_other_event)
+
+    check("GET /events/{eventId}/waitlist/{entryId} with unknown eventId yields 404 event_not_found with the Error schema", t_get_specific_waitlist_unknown_event)
+    check("GET /events/{eventId}/waitlist/{entryId} with unknown entryId yields 404 entry_not_found with the Error schema", t_get_specific_waitlist_unknown_entry)
+    
+    # new checks: DELETE /events/{eventId}/waitlist/{entryId}
+
+    check("DELETE /events/{eventId}/waitlist/{entryId} removes the entry (204) and a repeat yields 404 entry_not_found", t_delete_waitlist)
+    check("DELETE /events/{eventId}/waitlist/{entryId} with unknown eventId yields 404 event_not_found with the Error schema", t_delete_waitlist_unknown_event)
+    check("DELETE /events/{eventId}/waitlist/{entryId} with unknown entryId yields 404 entry_not_found with the Error schema", t_delete_waitlist_unknown_entry)
+    
+    # a test that mixes all of them
+    check("waitlist position moves up by one when an earlier entry is deleted", t_position_change_after_waitlist_delete)
 
 
     print(f"{CHECKS - FAILED}/{CHECKS} passed")
