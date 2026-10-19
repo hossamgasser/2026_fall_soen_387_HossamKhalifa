@@ -172,11 +172,10 @@ def create_waitlist(eventId):
     if not key:
         return jsonify({"error": "idempotency_key_required"}), 422
 
-    fingerprint = f"{eventId}|{body_hash()}"
     seen = WL_IDEMPOTENCY.get(key)
 
     if seen is not None:
-        if seen["hash"] != fingerprint:
+        if seen["hash"] != body_hash():
             # Same key, different request: a client bug, and a dangerous one.
             return jsonify({"error": "idempotency_key_reuse"}), 422
         resp = jsonify(seen["body"])                    # replay the stored outcome
@@ -220,7 +219,7 @@ def create_waitlist(eventId):
 
         outcome = (waitlist_response_schema(waitlist, true_position), 201)   # sticks to strict response schema despite storing away the userId
 
-    WL_IDEMPOTENCY[key] = {"hash": fingerprint, "status": outcome[1], "body": outcome[0]}
+    WL_IDEMPOTENCY[key] = {"hash": body_hash(), "status": outcome[1], "body": outcome[0]}
     return jsonify(outcome[0]), outcome[1]
         
 if __name__ == "__main__":

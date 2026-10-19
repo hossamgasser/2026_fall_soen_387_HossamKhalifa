@@ -357,6 +357,7 @@ components:
     Waitlist:
       type: object
       required: [id, eventId, position, createdAt]
+      additionalProperties: true   # evolvable response: new fields may be added later
       properties:
         id: { $ref: "#/components/schemas/WaitlistId" }
         eventId: { $ref: "#/components/schemas/EventId" }
@@ -377,7 +378,7 @@ components:
     JoinWaitlistRequest:
       type: object
       required: [userId]
-      additionalProperties: false
+      additionalProperties: false   # Strict request schema.
       properties:
         userId:
           type: string
