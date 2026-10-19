@@ -1,4 +1,4 @@
-# Assignment 1 (18-10-2026)
+# Assignment 1 (18-10-2026) Hossam Khalifa #40199572
 
 ### Original files before applying changes:
 
@@ -7,3 +7,10 @@
 - conformance.py was initially copied from Chapter 2's [listing_2_3_conformance.py](https://github.com/flydragon960/EnterpriseApplicationDesign_CodeBase/blob/main/chapter2/listing_2_3_conformance.py)
 
 - encore-openai.yaml was initially copied from Chapter 3's [encore-openapi-v1.1.yaml](https://github.com/flydragon960/EnterpriseApplicationDesign_CodeBase/blob/main/chapter3/encore-openapi-v1.1.yaml)
+
+
+Run Instructions:
+
+On one terminal run: ```python app.py```
+
+On another terminal after running the first, run: ```python conformance.py```
