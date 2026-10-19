@@ -314,7 +314,7 @@ def t_get_specific_waitlist_unknown_event():
 
 def t_get_specific_waitlist_unknown_entry():
 
-    status, body = get(f"/events/ev_102/waitlist/wl_0a0a0a0a0a") #random unknown entry id that matches format of the waitlist entry ids
+    status, body = get(f"/events/ev_102/waitlist/wl_0a0a0a0a") #random unknown entry id that matches format of the waitlist entry ids
     assert status == 404, f"expected 404, got {status}"
     assert body["error"] == "entry_not_found", f"expected entry_not_found, got {body.get('error')}"
 
@@ -355,7 +355,7 @@ def t_delete_waitlist_unknown_event():
 
 def t_delete_waitlist_unknown_entry():
 
-    status, body = request(method = "DELETE", path = "/events/ev_102/waitlist/0b0b0b0b0b")
+    status, body = request(method = "DELETE", path = "/events/ev_102/waitlist/0b0b0b0b")
     assert status == 404, f"expected 404, got {status}"
     assert body["error"] == "entry_not_found", f"expected entry_not_found, got {body.get('error')}"
 
