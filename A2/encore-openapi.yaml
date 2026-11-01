@@ -303,7 +303,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Reservation" }
         "404":
-          description: No reservation has this id.
+          description: No reservation has this id (error code not_found). Not retryable.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
