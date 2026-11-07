@@ -7,6 +7,7 @@ import time
 from flask import Flask, jsonify, request
 import secrets, string, threading
 from datetime import datetime, timezone
+import idempotency_store as idem
 
 app = Flask(__name__)
 
@@ -22,7 +23,6 @@ ISSUED = set()          # never remove from this, even when a waitlist entry is 
 _lock = threading.Lock()
 
 WAITLISTS = {}
-WL_IDEMPOTENCY = {}           # key -> {"request_hash": ..., "status": ..., "body": ...}
 
 def new_waitlist_id():
     while True:
@@ -34,6 +34,12 @@ def new_waitlist_id():
             
 def body_hash():
     return hashlib.sha256(request.get_data() or b"").hexdigest()
+
+def request_fingerprint():
+    # method + path pins the operation and the event; the body hash pins the content
+    raw = f"{request.method} {request.path}|{body_hash()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
 
 def waitlist_response_schema(wl_entry, position):
     # ignores the wl userId for responses to only output matching the encore-openapi.yaml
@@ -172,10 +178,11 @@ def create_waitlist(eventId):
     if not key:
         return jsonify({"error": "idempotency_key_required"}), 422
 
-    seen = WL_IDEMPOTENCY.get(key)
+    fingerprint = f"{eventId}|{body_hash()}"      # event + body
+    seen = idem.get("waitlist", key)
 
     if seen is not None:
-        if seen["hash"] != body_hash():
+        if seen["hash"] != fingerprint:         # This is a fix instead of body_hash() so now its not only for the body
             # Same key, different request: a client bug, and a dangerous one.
             return jsonify({"error": "idempotency_key_reuse"}), 422
         resp = jsonify(seen["body"])                    # replay the stored outcome
@@ -219,7 +226,7 @@ def create_waitlist(eventId):
 
         outcome = (waitlist_response_schema(waitlist, true_position), 201)   # sticks to strict response schema despite storing away the userId
 
-    WL_IDEMPOTENCY[key] = {"hash": body_hash(), "status": outcome[1], "body": outcome[0]}
+    idem.put("waitlist", key, fingerprint, outcome[1], outcome[0])          # stored in database no longer just a in memory array
     return jsonify(outcome[0]), outcome[1]
         
 if __name__ == "__main__":
